@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Build with Claude - Hand Tracking Planet</title>
+    
+    <link rel="stylesheet" href="style.css">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+</head>
+<body>
+
+    <div id="ui-text">
+        <h2>Build with claude ! 🚀</h2>
+        <p>Fold your fingers to manifest the planet</p>
+    </div>
+    
+    <video id="webcam" autoplay playsinline></video>
+    <div id="canvas-container"></div>
+    <canvas id="tracking-canvas"></canvas>
+
+    <script>
+        // --- 1. THREE.JS SCENE SETUP ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x020208, 0.015);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 15;
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        container.appendChild(renderer.domElement);
+
+        // --- 2D TRACKING CANVAS SETUP ---
+        const trackingCanvas = document.getElementById('tracking-canvas');
+        const ctx2d = trackingCanvas.getContext('2d');
+        
+        function resizeCanvases() {
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            
+            camera.aspect = w / h;
+            camera.updateProjectionMatrix();
+            renderer.setSize(w, h);
+            
+            trackingCanvas.width = w;
+            trackingCanvas.height = h;
+        }
+        window.addEventListener('resize', resizeCanvases);
+        setTimeout(resizeCanvases, 100); // Initial sizing buffer
+
+        // --- PARTICLE GENERATION ENGINE ---
+        const particleCount = 9500; // Enhanced density for clear planet definition
+        const geometry = new THREE.BufferGeometry();
+        
+        const positions = new Float32Array(particleCount * 3);
+        const scatteredTargets = new Float32Array(particleCount * 3);
+        const planetTargets = new Float32Array(particleCount * 3);
+        const colors = new Float32Array(particleCount * 3);
+
+        const baseColor = new THREE.Color(0x00aaff);  // Deep galactic blue
+        const planetColor = new THREE.Color(0xff4400); // Fiery core planet
+        const ringColor = new THREE.Color(0x00ffff);   // Neon cyber ring
+
+        for (let i = 0; i < particleCount * 3; i += 3) {
+            
+            // 1. SCATTERED INITIAL STATE
+            let sRadius = Math.random() * 9 + 3;
+            let sTheta = Math.random() * Math.PI * 2;
+            let sPhi = Math.acos(2.0 * Math.random() - 1.0);
+            
+            scatteredTargets[i]   = sRadius * Math.sin(sPhi) * Math.cos(sTheta);
+            scatteredTargets[i+1] = sRadius * Math.sin(sPhi) * Math.sin(sTheta);
+            scatteredTargets[i+2] = sRadius * Math.cos(sPhi);
+
+            // 2. HIGHER-DENSITY PLANET + RING MATRIX
+            if (i < (particleCount * 3) * 0.60) {
+                // 60% form a tight, well-defined solid planet sphere
+                let pRadius = 2.0 + (Math.random() * 0.2); 
+                let pTheta = Math.random() * Math.PI * 2;
+                let pPhi = Math.acos(2.0 * Math.random() - 1.0);
+
+                planetTargets[i]   = pRadius * Math.sin(pPhi) * Math.cos(pTheta);
+                planetTargets[i+1] = pRadius * Math.sin(pPhi) * Math.sin(pTheta);
+                planetTargets[i+2] = pRadius * Math.cos(pPhi);
+            } else {
+                // 40% form a flat, wide distinct ring system
+                let rRadius = Math.random() * 3.6 + 3.0;
+                let rTheta = Math.random() * Math.PI * 2;
+                
+                planetTargets[i]   = rRadius * Math.cos(rTheta);
+                planetTargets[i+1] = (Math.random() - 0.5) * 0.05; // Tight Y thickness for sharp ring lines
+                planetTargets[i+2] = rRadius * Math.sin(rTheta);
+            }
+
+            // Start system configuration
+            positions[i]   = scatteredTargets[i];
+            positions[i+1] = scatteredTargets[i+1];
+            positions[i+2] = scatteredTargets[i+2];
+
+            // Assign base color channels
+            colors[i]     = baseColor.r;
+            colors[i+1]   = baseColor.g;
+            colors[i+2]   = baseColor.b;
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+        // Glow Texture Generator
+        const createGlowTexture = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 16;
+            canvas.height = 16;
+            const ctx = canvas.getContext('2d');
+            const grad = ctx.createRadialGradient(8, 8, 0, 8, 8, 8);
+            grad.addColorStop(0, 'rgba(255,255,255,1)');
+            grad.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 16, 16);
+            return new THREE.CanvasTexture(canvas);
+        };
+
+        const material = new THREE.PointsMaterial({
+            size: 0.08,
+            map: createGlowTexture(),
+            vertexColors: true, // Allows individual particle color maps
+            transparent: true,
+            opacity: 0.95,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+
+        const particleSystem = new THREE.Points(geometry, material);
+        scene.add(particleSystem);
+
+        // State parameters
+        let targetRotationX = 0.3; // Default angle to display planetary ring beautifully
+        let targetRotationY = 0.5;
+        let morphProgress = 0; 
+
+        // --- ANIMATION FRAME LOOP ---
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = Date.now();
+
+            // Rotational physics
+            particleSystem.rotation.x += (targetRotationX - particleSystem.rotation.x) * 0.05;
+            particleSystem.rotation.y += (targetRotationY - particleSystem.rotation.y) * 0.05;
+            particleSystem.rotation.z += 0.0015; // Slow horizontal drift spin
+
+            const posAttr = geometry.attributes.position;
+            const colorAttr = geometry.attributes.color;
+            
+            for (let i = 0; i < particleCount * 3; i += 3) {
+                let targetX = THREE.MathUtils.lerp(scatteredTargets[i], planetTargets[i], morphProgress);
+                let targetY = THREE.MathUtils.lerp(scatteredTargets[i+1], planetTargets[i+1], morphProgress);
+                let targetZ = THREE.MathUtils.lerp(scatteredTargets[i+2], planetTargets[i+2], morphProgress);
+
+                // Idle wave movement when scattered
+                let wave = Math.sin(i + time * 0.002) * 0.02 * (1 - morphProgress);
+
+                posAttr.array[i]   += (targetX - posAttr.array[i]) * 0.15 + wave;
+                posAttr.array[i+1] += (targetY - posAttr.array[i+1]) * 0.15 + wave;
+                posAttr.array[i+2] += (targetZ - posAttr.array[i+2]) * 0.15;
+
+                // Color Morphing Logic based on structural position
+                if (i < (particleCount * 3) * 0.60) {
+                    // Planet Core shifts toward deep hot orange/gold
+                    colorAttr.array[i]   += (THREE.MathUtils.lerp(baseColor.r, planetColor.r, morphProgress) - colorAttr.array[i]) * 0.1;
+                    colorAttr.array[i+1] += (THREE.MathUtils.lerp(baseColor.g, planetColor.g, morphProgress) - colorAttr.array[i+1]) * 0.1;
+                    colorAttr.array[i+2] += (THREE.MathUtils.lerp(baseColor.b, planetColor.b, morphProgress) - colorAttr.array[i+2]) * 0.1;
+                } else {
+                    // Ring shifts toward electric neon cyan
+                    colorAttr.array[i]   += (THREE.MathUtils.lerp(baseColor.r, ringColor.r, morphProgress) - colorAttr.array[i]) * 0.1;
+                    colorAttr.array[i+1] += (THREE.MathUtils.lerp(baseColor.g, ringColor.g, morphProgress) - colorAttr.array[i+1]) * 0.1;
+                    colorAttr.array[i+2] += (THREE.MathUtils.lerp(baseColor.b, ringColor.b, morphProgress) - colorAttr.array[i+2]) * 0.1;
+                }
+            }
+            posAttr.needsUpdate = true;
+            colorAttr.needsUpdate = true;
+
+            renderer.render(scene, camera);
+        }
+        animate();
+
+
+        // --- 2. MEDIAPIPE TRACKING & 2D HUD DRAWER ---
+        const videoElement = document.getElementById('webcam');
+
+        function onResults(results) {
+            // Clear previous 2D frame tracking dots
+            ctx2d.clearRect(0, 0, trackingCanvas.width, trackingCanvas.height);
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const hand = results.multiHandLandmarks[0];
+                
+                // Draw digital matrix tracking lines and dots on the overlay canvas
+                for (let landmark of hand) {
+                    // Mirroring the X coordinate horizontally to match natural hand placement
+                    let x = (1 - landmark.x) * trackingCanvas.width;
+                    let y = landmark.y * trackingCanvas.height;
+
+                    // Draw Glowing Joint Point
+                    ctx2d.beginPath();
+                    ctx2d.arc(x, y, 5, 0, 2 * Math.PI);
+                    ctx2d.fillStyle = 'rgba(0, 255, 200, 0.8)';
+                    ctx2d.shadowBlur = 12;
+                    ctx2d.shadowColor = '#00ffcc';
+                    ctx2d.fill();
+                }
+
+                // Spatial tracking math
+                const indexTip = hand[8];
+                const thumbTip = hand[4];
+
+                targetRotationY = (indexTip.x - 0.5) * Math.PI * 1.8;
+                targetRotationX = (indexTip.y - 0.5) * Math.PI * 1.8;
+
+                // Capture structural compression threshold 
+                let distance = Math.hypot(indexTip.x - thumbTip.x, indexTip.y - thumbTip.y);
+
+                if (distance < 0.08) {
+                    morphProgress += (1.0 - morphProgress) * 0.09; // Snaps particles into crisp sphere
+                } else {
+                    morphProgress += (0.0 - morphProgress) * 0.06; // Disperses them outward
+                }
+            } else {
+                // If hand departs view, slowly explode back to dark cosmic dust space
+                morphProgress += (0.0 - morphProgress) * 0.05;
+            }
+        }
+
+        const hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+        hands.onResults(onResults);
+
+        const cameraUtils = new Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({ image: videoElement });
+            },
+            width: 640,
+            height: 480
+        });
+        cameraUtils.start();
+
+    </script>
+</body>
+</html>
