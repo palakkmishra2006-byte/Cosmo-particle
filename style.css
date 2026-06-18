@@ -1,0 +1,67 @@
+/* Reset and Base Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    overflow: hidden;
+    background-color: #020208;
+    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* 3D Scene Container */
+#canvas-container {
+    width: 100vw;
+    height: 100vh;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1;
+    background: radial-gradient(circle at center, #070b1e 0%, #020208 100%);
+}
+
+/* Transparent 2D Canvas Layer for Tracking Dots */
+#tracking-canvas {
+    width: 100vw;
+    height: 100vh;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 5; /* Sits right between the 3D scene and the text UI */
+    pointer-events: none; /* Allows clicks to pass through if needed */
+}
+
+/* UI Text Overlay */
+#ui-text {
+    position: absolute;
+    top: 8%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90%;
+    max-width: 600px;
+    text-align: center;
+    color: #ffffff;
+    z-index: 10;
+    pointer-events: none;
+}
+
+#ui-text h2 {
+    font-size: 2.2rem;
+    font-weight: 600;
+    letter-spacing: 3px;
+    margin-bottom: 5px;
+    text-shadow: 0 0 20px rgba(255, 255, 255, 0.4);
+}
+
+#ui-text p {
+    font-size: 0.9rem;
+    color: #8a99ad;
+    letter-spacing: 1px;
+}
+
+/* Background camera processing hidden from view */
+#webcam {
+    display: none;
+}
